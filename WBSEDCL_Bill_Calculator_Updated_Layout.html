@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WBSEDCL Bill Calculator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; text-align: center; background-color: #f4f4f4; display: flex; justify-content: center; align-items: flex-start; height: 100vh; padding-top: 20px; }
+        .container { max-width: 500px; width: 90%; background: white; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); text-align: center; }
+        h2 { color: #333; }
+        input, button { width: 100%; padding: 10px; margin: 10px 0; font-size: 16px; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; }
+        button { background-color: #28a745; color: white; border: none; cursor: pointer; }
+        button:hover { background-color: #218838; }
+        .result { margin-top: 20px; font-weight: bold; text-align: left; padding: 10px; background: #e9ecef; border-radius: 5px; display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>WBSEDCL Electricity Bill Calculator</h2>
+        
+        <label>Connected Load (kVA):</label>
+        <input type="number" id="connectedLoad" step="0.01" min="0.1" placeholder="Enter Load (e.g., 2.34)" required>
+        
+        <label>Units Consumed:</label>
+        <input type="number" id="unitsConsumed" step="1" min="0" placeholder="Enter Units (e.g., 36)" required>
+        
+        <button onclick="calculateBill()">Calculate Bill</button>
+
+        <div class="result" id="billOutput"></div>
+    </div>
+
+    <script>
+        function calculateBill() {
+            let load = parseFloat(document.getElementById("connectedLoad").value);
+            let units = parseInt(document.getElementById("unitsConsumed").value);
+
+            if (!load || load <= 0 || isNaN(units) || units < 0) {
+                document.getElementById("billOutput").innerHTML = "<p style='color:red;'>Please enter valid inputs.</p>";
+                document.getElementById("billOutput").style.display = "block";
+                return;
+            }
+
+            let billedLoad = Math.max(load, 1);
+
+            // WBSEDCL Energy Charge Slabs (₹/unit) and Government Subsidy (₹/unit)
+            let slabs = [
+                { limit: 102, rate: 5.00, subsidy: 0.90 },
+                { limit: 78, rate: 6.24, subsidy: 0.90 },
+                { limit: 120, rate: 6.89, subsidy: 0.74 },
+                { limit: 300, rate: 7.44, subsidy: 0.79 },
+                { limit: 300, rate: 7.61, subsidy: 0.80 },
+                { limit: Infinity, rate: 9.22, subsidy: 0.80 }
+            ];
+
+            // Fixed Charges & Minimum Charges
+            const fixedChargePerKVA = 30;
+            const minChargePerKVA = 75;
+            const fixedSubsidyPerKVA = 10;
+            const meterRent = 30;
+
+            // Calculate Energy Charge using Slabs
+            let remainingUnits = units;
+            let energyCharge = 0;
+            let subsidyAmount = 0;
+
+            for (let i = 0; i < slabs.length && remainingUnits > 0; i++) {
+                let chargeableUnits = Math.min(remainingUnits, slabs[i].limit);
+                energyCharge += chargeableUnits * slabs[i].rate;
+                subsidyAmount += chargeableUnits * slabs[i].subsidy;
+                remainingUnits -= chargeableUnits;
+            }
+
+            // Calculate Fixed Charge and Minimum Charge
+            let fixedCharge = billedLoad * fixedChargePerKVA * 3;
+            let minCharge = billedLoad * minChargePerKVA * 3;
+            let minThreshold = Math.floor((minCharge - fixedCharge) / 5);
+            let totalBeforeSubsidy = Math.max(energyCharge + fixedCharge, minCharge) + meterRent;
+
+            // Apply Government Subsidy
+            let fixedSubsidy = billedLoad * fixedSubsidyPerKVA * 3;
+            let totalSubsidy = fixedSubsidy + subsidyAmount;
+            let totalAfterSubsidy = totalBeforeSubsidy - totalSubsidy;
+
+            // Determine rebate base (whichever is greater: Energy Charge + Fixed Charge OR Minimum Charge)
+            let rebateBase = Math.max(energyCharge + fixedCharge, minCharge);
+
+            // Apply Rebates
+            let timelyPaymentRebate = rebateBase * 0.01;
+            let specialRebate = units * 0.10;
+            let billAfterRebates = totalAfterSubsidy - timelyPaymentRebate - specialRebate;
+
+            // Round the Bill Amount Before E-Payment Rebate
+            let finalBill = Math.round(billAfterRebates);
+
+            // Apply E-Payment Rebate (Floor value of 1% of rebate base)
+            let ePaymentRebate = Math.floor(rebateBase * 0.01);
+            let finalEpaymentBill = finalBill - ePaymentRebate;
+
+            // Display the correct charge breakdown
+            let billDetails = `<p>⚡ <b>Minimum Charge:</b> ₹${minCharge.toFixed(2)}</p>`;
+
+            if (energyCharge + fixedCharge > minCharge) {
+                billDetails = `<p>⚡ <b>Energy Charge:</b> ₹${energyCharge.toFixed(2)}</p>
+                               <p>🔧 <b>Fixed Charge:</b> ₹${fixedCharge.toFixed(2)}</p>`;
+            }
+
+            billDetails += `<p>📉 <b>Minimum Threshold:</b> ${minThreshold} Units</p>
+                            <p>💡 <b>Meter Rent:</b> ₹${meterRent.toFixed(2)}</p>
+                            <p>🏛 <b>Subsidy:</b> ₹${fixedSubsidy.toFixed(2)} + ₹${subsidyAmount.toFixed(2)} = ₹${totalSubsidy.toFixed(2)}</p>
+                            <p>💰 <b>Gross Demand:</b> ₹${totalAfterSubsidy.toFixed(2)}</p>
+                            <p>💳 <b>Monthly Rebate (1%):</b> ₹${timelyPaymentRebate.toFixed(2)}</p>
+                            <p>💰 <b>Special Rebate (₹0.10/Unit):</b> ₹${specialRebate.toFixed(2)}</p>
+                            <p>✅ <b>Amount Within 1st Due Date:</b> ₹${finalBill}</p>
+                            <p>🌐 <b>E-Payment Rebate (1%):</b> ₹${ePaymentRebate}</p>
+                            <p>✅ <b>Final Amount for E-Payment:</b> ₹${finalEpaymentBill}</p>`;
+
+            // Display the Bill Output
+            document.getElementById("billOutput").innerHTML = billDetails;
+            document.getElementById("billOutput").style.display = "block";
+        }
+    </script>
+
+</body>
+</html>
